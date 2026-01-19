@@ -1,0 +1,15 @@
+# Shairport-Sync MQTT Web Interface Configuration
+# Copy this file to config.yaml and update with your settings
+
+mqtt:
+  host: "localhost"
+  port: 1883
+  username: ""  # Leave empty if no authentication
+  password: ""  # Leave empty if no authentication
+  topic: "shairport"  # Base topic configured in shairport-sync
+  client_id: "shairport-web"
+
+server:
+  host: "0.0.0.0"
+  port: 5001
+  debug: false

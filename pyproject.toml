@@ -1,0 +1,16 @@
+[tool.poetry]
+name = "shairport-mqtt-web"
+version = "0.1.0"
+description = "A Flask web interface for shairport-sync via MQTT"
+package-mode = false
+
+[tool.poetry.dependencies]
+python = "^3.9"
+flask = "^3.0.0"
+paho-mqtt = "^2.0.0"
+pyyaml = "^6.0"
+gunicorn = "^21.0.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shairport-Sync Now Playing</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <div class="player">
+            <div class="cover-container">
+                <img id="cover-art" src="/api/cover" alt="Album Art" onerror="this.src='/static/placeholder.svg'">
+            </div>
+
+            <div class="metadata">
+                <div id="title" class="title">Not Playing</div>
+                <div id="artist" class="artist"></div>
+                <div id="album" class="album"></div>
+            </div>
+
+            <div class="controls">
+                <button class="control-btn" onclick="sendCommand('previous')" title="Previous">
+                    <svg viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/>
+                    </svg>
+                </button>
+                <button class="control-btn play-btn" onclick="sendCommand('playpause')" title="Play/Pause">
+                    <svg id="play-icon" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M8 5v14l11-7z"/>
+                    </svg>
+                </button>
+                <button class="control-btn" onclick="sendCommand('next')" title="Next">
+                    <svg viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/>
+                    </svg>
+                </button>
+            </div>
+
+            <div class="secondary-controls">
+                <button class="control-btn small" onclick="sendCommand('volumedown')" title="Volume Down">
+                    <svg viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M18.5 12c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM5 9v6h4l5 5V4L9 9H5z"/>
+                    </svg>
+                </button>
+                <button class="control-btn small" onclick="sendCommand('volumeup')" title="Volume Up">
+                    <svg viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
+                    </svg>
+                </button>
+            </div>
+
+            <div id="client-info" class="client-info"></div>
+            <div id="status" class="status"></div>
+        </div>
+    </div>
+
+    <script>
+        let lastCoverHash = '';
+
+        async function updateState() {
+            try {
+                const response = await fetch('/api/state');
+                const state = await response.json();
+
+                document.getElementById('title').textContent = state.title || 'Not Playing';
+                document.getElementById('artist').textContent = state.artist || '';
+                document.getElementById('album').textContent = state.album || '';
+
+                if (state.client_name) {
+                    document.getElementById('client-info').textContent = `Playing from: ${state.client_name}`;
+                } else {
+                    document.getElementById('client-info').textContent = '';
+                }
+
+                // Update cover art if available
+                const coverImg = document.getElementById('cover-art');
+                if (state.has_cover) {
+                    // Add timestamp to force refresh when cover changes
+                    const newSrc = '/api/cover?t=' + Date.now();
+                    if (coverImg.src.split('?')[0] !== '/api/cover') {
+                        coverImg.src = newSrc;
+                    } else {
+                        // Only update if we detect a change (simple polling)
+                        coverImg.src = newSrc;
+                    }
+                } else {
+                    coverImg.src = '/static/placeholder.svg';
+                }
+
+                // Update status indicator
+                const statusEl = document.getElementById('status');
+                if (state.active) {
+                    statusEl.textContent = 'Active';
+                    statusEl.className = 'status active';
+                } else {
+                    statusEl.textContent = 'Inactive';
+                    statusEl.className = 'status inactive';
+                }
+            } catch (error) {
+                console.error('Failed to fetch state:', error);
+            }
+        }
+
+        async function sendCommand(command) {
+            try {
+                const response = await fetch(`/api/control/${command}`, {
+                    method: 'POST'
+                });
+                const result = await response.json();
+                if (!result.success) {
+                    console.error('Command failed:', result.error);
+                }
+            } catch (error) {
+                console.error('Failed to send command:', error);
+            }
+        }
+
+        // Initial update
+        updateState();
+
+        // Poll for updates every 2 seconds
+        setInterval(updateState, 2000);
+    </script>
+</body>
+</html>
