@@ -170,6 +170,15 @@ body {
     height: 18px;
 }
 
+.control-btn.active {
+    background: rgba(29, 185, 84, 0.4);
+    color: #1db954;
+}
+
+.control-btn.active:hover {
+    background: rgba(29, 185, 84, 0.5);
+}
+
 .client-info {
     text-align: center;
     font-size: 0.8rem;

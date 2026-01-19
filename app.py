@@ -31,6 +31,9 @@ state = {
     "progress_start": 0,
     "progress_current": 0,
     "progress_end": 0,
+    "progress_version": 0,  # Incremented when progress changes
+    "shuffle": False,  # Shuffle mode
+    "repeat": False,   # Repeat mode
 }
 
 # Audio sample rate (standard for AirPlay)
@@ -73,6 +76,8 @@ def get_state_dict():
         "duration": round(duration, 1),
         "elapsed": round(elapsed, 1),
         "remaining": round(remaining, 1),
+        "shuffle": state["shuffle"],
+        "repeat": state["repeat"],
     }
 
 
@@ -118,6 +123,9 @@ def on_message(client, userdata, msg):
     # Get the final part of the subtopic (handles ssnc/xxx nesting)
     topic_key = subtopic.split("/")[-1]
 
+    # Track whether we should notify clients (skip for volume-only updates during playback)
+    should_notify = True
+
     # Handle different message types (topic_key is final segment, e.g. "prgr" from "ssnc/prgr")
     if topic_key == "artist":
         state["artist"] = msg.payload.decode("utf-8", errors="ignore")
@@ -129,6 +137,8 @@ def on_message(client, userdata, msg):
         state["genre"] = msg.payload.decode("utf-8", errors="ignore")
     elif topic_key == "volume":
         state["volume"] = msg.payload.decode("utf-8", errors="ignore")
+        # Don't notify for volume-only changes to avoid resetting progress display
+        should_notify = False
     elif topic_key == "client_name":
         state["client_name"] = msg.payload.decode("utf-8", errors="ignore")
     elif topic_key == "cover":
@@ -176,9 +186,27 @@ def on_message(client, userdata, msg):
     elif topic_key == "pend":
         # Playback ended/paused - keep metadata but stop progress
         state["active"] = False
+    elif topic_key == "shsw":
+        # Shuffle state: 0=off, 1=on
+        try:
+            shuffle_value = int(msg.payload.decode("utf-8"))
+            state["shuffle"] = (shuffle_value == 1)
+        except (ValueError, UnicodeDecodeError):
+            pass
+    elif topic_key == "rpte":
+        # Repeat state: 0=off, 1=one, 2=all
+        try:
+            repeat_value = int(msg.payload.decode("utf-8"))
+            state["repeat"] = (repeat_value > 0)
+        except (ValueError, UnicodeDecodeError):
+            pass
+    else:
+        # Unknown topic, don't notify
+        should_notify = False
 
-    # Notify all connected SSE clients of state change
-    notify_clients()
+    # Notify all connected SSE clients of state change (except for volume-only updates)
+    if should_notify:
+        notify_clients()
 
 
 def on_disconnect(client, userdata, disconnect_flags, reason_code, properties=None):
@@ -306,8 +334,6 @@ def control(command):
         "playresume": "playresume",
         "next": "nextitem",
         "previous": "previtem",
-        "fastforward": "beginff",
-        "rewind": "beginrew",
         "volumeup": "volumeup",
         "volumedown": "volumedown",
         "mute": "mutetoggle",
