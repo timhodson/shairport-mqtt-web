@@ -2,7 +2,7 @@
 
 A Flask web application that displays now-playing information from [shairport-sync](https://github.com/mikebrady/shairport-sync) via MQTT and provides transport controls.
 
-![A screenshot of the web view in action](image.png)
+![A screenshot of the web view in action](image-1.png)
 
 ## Features
 
