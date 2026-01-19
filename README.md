@@ -2,6 +2,8 @@
 
 A Flask web application that displays now-playing information from [shairport-sync](https://github.com/mikebrady/shairport-sync) via MQTT and provides transport controls.
 
+![A screenshot of the web view in action](image.png)
+
 ## Features
 
 - Real-time display of currently playing track (title, artist, album)
@@ -92,6 +94,11 @@ To install as a systemd service on Linux (e.g., Raspberry Pi):
    ```bash
    sudo journalctl -u shairport-mqtt-web -f
    ```
+
+To update and redeploy after making changes:
+```bash
+make redeploy
+```
 
 To uninstall the service:
 ```bash
