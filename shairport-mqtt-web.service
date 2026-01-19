@@ -1,0 +1,17 @@
+[Unit]
+Description=Shairport-Sync MQTT Web Interface
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+WorkingDirectory=/opt/shairport-mqtt-web
+ExecStart=/opt/shairport-mqtt-web/.venv/bin/gunicorn app:app
+Restart=on-failure
+RestartSec=5
+Environment=PATH=/opt/shairport-mqtt-web/.venv/bin:/usr/bin
+
+[Install]
+WantedBy=multi-user.target

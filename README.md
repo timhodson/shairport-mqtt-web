@@ -61,6 +61,45 @@ make prod
 
 The web interface will be available at `http://localhost:5001` (or the port configured in `config.yaml`).
 
+### Linux Service Installation
+
+To install as a systemd service on Linux (e.g., Raspberry Pi):
+
+1. First, ensure you have configured `config.yaml` with your settings.
+
+2. Deploy and install the service:
+   ```bash
+   make deploy
+   ```
+
+   This will:
+   - Copy files to `/opt/shairport-mqtt-web`
+   - Create a Python virtual environment
+   - Install the systemd service
+   - Enable the service to start on boot
+
+3. Start the service:
+   ```bash
+   sudo systemctl start shairport-mqtt-web
+   ```
+
+4. Check status:
+   ```bash
+   sudo systemctl status shairport-mqtt-web
+   ```
+
+5. View logs:
+   ```bash
+   sudo journalctl -u shairport-mqtt-web -f
+   ```
+
+To uninstall the service:
+```bash
+make uninstall-service
+```
+
+**Note:** The service file assumes user `pi`. Edit `shairport-mqtt-web.service` before deploying if you need a different user.
+
 ## shairport-sync Configuration
 
 Ensure your shairport-sync is configured to publish metadata via MQTT. Add the following to your shairport-sync configuration:
