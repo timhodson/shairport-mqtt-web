@@ -5,8 +5,8 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=pi
-Group=pi
+DynamicUser=yes
+StateDirectory=shairport-mqtt-web
 WorkingDirectory=/opt/shairport-mqtt-web
 ExecStart=/opt/shairport-mqtt-web/.venv/bin/gunicorn app:app
 Restart=on-failure

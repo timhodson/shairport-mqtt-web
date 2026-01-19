@@ -98,7 +98,7 @@ To uninstall the service:
 make uninstall-service
 ```
 
-**Note:** The service file assumes user `pi`. Edit `shairport-mqtt-web.service` before deploying if you need a different user.
+**Note:** The service uses systemd's `DynamicUser` feature which creates a temporary user automatically.
 
 ## shairport-sync Configuration
 
