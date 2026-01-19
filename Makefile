@@ -1,4 +1,4 @@
-.PHONY: dev prod install deploy install-service uninstall-service
+.PHONY: dev prod install deploy install-service uninstall-service redeploy
 
 INSTALL_DIR = /opt/shairport-mqtt-web
 SERVICE_FILE = shairport-mqtt-web.service
@@ -36,3 +36,18 @@ uninstall-service:
 	@echo "Removing installation directory..."
 	sudo rm -rf $(INSTALL_DIR)
 	@echo "Uninstalled."
+
+redeploy:
+	@echo "Pulling latest code..."
+	git pull
+	@echo "Stopping service..."
+	-sudo systemctl stop shairport-mqtt-web
+	@echo "Updating files..."
+	sudo cp -r app.py gunicorn.conf.py templates static pyproject.toml poetry.lock $(INSTALL_DIR)/
+	sudo cp $(SERVICE_FILE) /etc/systemd/system/
+	@echo "Installing dependencies..."
+	cd $(INSTALL_DIR) && sudo $(INSTALL_DIR)/.venv/bin/poetry install --only main
+	@echo "Reloading and starting service..."
+	sudo systemctl daemon-reload
+	sudo systemctl start shairport-mqtt-web
+	@echo "Redeploy complete."
