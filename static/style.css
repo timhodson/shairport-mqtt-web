@@ -74,11 +74,38 @@ body {
     white-space: nowrap;
 }
 
+.progress-container {
+    margin-bottom: 20px;
+}
+
+.progress-bar {
+    height: 4px;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 2px;
+    overflow: hidden;
+    margin-bottom: 8px;
+}
+
+.progress-fill {
+    height: 100%;
+    background: #1db954;
+    border-radius: 2px;
+    width: 0%;
+    transition: width 0.3s ease;
+}
+
+.progress-time {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.75rem;
+    color: rgba(255, 255, 255, 0.6);
+}
+
 .controls {
     display: flex;
     justify-content: center;
     align-items: center;
-    gap: 20px;
+    gap: 12px;
     margin-bottom: 20px;
 }
 
@@ -86,14 +113,15 @@ body {
     background: rgba(255, 255, 255, 0.15);
     border: none;
     border-radius: 50%;
-    width: 50px;
-    height: 50px;
+    width: 44px;
+    height: 44px;
     cursor: pointer;
     display: flex;
     justify-content: center;
     align-items: center;
     transition: all 0.2s ease;
     color: #fff;
+    flex-shrink: 0;
 }
 
 .control-btn:hover {
@@ -106,13 +134,13 @@ body {
 }
 
 .control-btn svg {
-    width: 24px;
-    height: 24px;
+    width: 22px;
+    height: 22px;
 }
 
 .control-btn.play-btn {
-    width: 65px;
-    height: 65px;
+    width: 56px;
+    height: 56px;
     background: #1db954;
 }
 
@@ -121,25 +149,25 @@ body {
 }
 
 .control-btn.play-btn svg {
-    width: 32px;
-    height: 32px;
+    width: 28px;
+    height: 28px;
 }
 
 .secondary-controls {
     display: flex;
     justify-content: center;
-    gap: 15px;
+    gap: 10px;
     margin-bottom: 20px;
 }
 
 .control-btn.small {
-    width: 40px;
-    height: 40px;
+    width: 36px;
+    height: 36px;
 }
 
 .control-btn.small svg {
-    width: 20px;
-    height: 20px;
+    width: 18px;
+    height: 18px;
 }
 
 .client-info {

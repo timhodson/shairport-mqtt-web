@@ -6,10 +6,13 @@ A Flask web application that displays now-playing information from
 shairport-sync via MQTT and provides transport controls.
 """
 
+import json
+import queue
+import socket
 import yaml
 import paho.mqtt.client as mqtt
 from paho.mqtt.enums import CallbackAPIVersion
-from flask import Flask, render_template, jsonify, Response
+from flask import Flask, render_template, jsonify, redirect, Response
 
 app = Flask(__name__)
 
@@ -24,17 +27,69 @@ state = {
     "client_name": "",
     "cover_art": None,  # Binary image data
     "cover_art_type": "image/jpeg",
+    "cover_version": 0,  # Incremented when cover changes
+    "progress_start": 0,
+    "progress_current": 0,
+    "progress_end": 0,
 }
+
+# Audio sample rate (standard for AirPlay)
+SAMPLE_RATE = 44100
 
 # MQTT client instance
 mqtt_client = None
 config = None
+
+# SSE clients - list of queues for connected clients
+sse_clients = []
 
 
 def load_config(config_path="config.yaml"):
     """Load configuration from YAML file."""
     with open(config_path, "r") as f:
         return yaml.safe_load(f)
+
+
+def get_state_dict():
+    """Build and return current state as a dictionary."""
+    duration = 0
+    elapsed = 0
+    remaining = 0
+    if state["progress_end"] > state["progress_start"]:
+        duration = (state["progress_end"] - state["progress_start"]) / SAMPLE_RATE
+        elapsed = (state["progress_current"] - state["progress_start"]) / SAMPLE_RATE
+        remaining = max(0, duration - elapsed)
+
+    return {
+        "active": state["active"],
+        "artist": state["artist"],
+        "album": state["album"],
+        "title": state["title"],
+        "genre": state["genre"],
+        "volume": state["volume"],
+        "client_name": state["client_name"],
+        "has_cover": state["cover_art"] is not None,
+        "cover_version": state["cover_version"],
+        "duration": round(duration, 1),
+        "elapsed": round(elapsed, 1),
+        "remaining": round(remaining, 1),
+    }
+
+
+def notify_clients():
+    """Send current state to all connected SSE clients."""
+    state_data = get_state_dict()
+    message = f"data: {json.dumps(state_data)}\n\n"
+    dead_clients = []
+    for client_queue in sse_clients:
+        try:
+            client_queue.put_nowait(message)
+        except queue.Full:
+            dead_clients.append(client_queue)
+    # Remove dead clients
+    for dead in dead_clients:
+        if dead in sse_clients:
+            sse_clients.remove(dead)
 
 
 def on_connect(client, userdata, flags, reason_code, properties=None):
@@ -60,32 +115,48 @@ def on_message(client, userdata, msg):
     else:
         return
 
-    # Handle different message types
-    if subtopic == "artist":
+    # Get the final part of the subtopic (handles ssnc/xxx nesting)
+    topic_key = subtopic.split("/")[-1]
+
+    # Handle different message types (topic_key is final segment, e.g. "prgr" from "ssnc/prgr")
+    if topic_key == "artist":
         state["artist"] = msg.payload.decode("utf-8", errors="ignore")
-    elif subtopic == "album":
+    elif topic_key == "album":
         state["album"] = msg.payload.decode("utf-8", errors="ignore")
-    elif subtopic == "title":
+    elif topic_key == "title":
         state["title"] = msg.payload.decode("utf-8", errors="ignore")
-    elif subtopic == "genre":
+    elif topic_key == "genre":
         state["genre"] = msg.payload.decode("utf-8", errors="ignore")
-    elif subtopic == "volume":
+    elif topic_key == "volume":
         state["volume"] = msg.payload.decode("utf-8", errors="ignore")
-    elif subtopic == "client_name":
+    elif topic_key == "client_name":
         state["client_name"] = msg.payload.decode("utf-8", errors="ignore")
-    elif subtopic == "cover":
+    elif topic_key == "cover":
         # Cover art is sent as binary data
         if msg.payload and len(msg.payload) > 0:
             state["cover_art"] = msg.payload
+            state["cover_version"] += 1
             # Detect image type from magic bytes
             if msg.payload[:3] == b'\xff\xd8\xff':
                 state["cover_art_type"] = "image/jpeg"
             elif msg.payload[:8] == b'\x89PNG\r\n\x1a\n':
                 state["cover_art_type"] = "image/png"
-    elif subtopic == "active_start":
+    elif topic_key == "prgr":
+        # Progress: "start/current/end" as RTP timestamps
+        try:
+            parts = msg.payload.decode("utf-8").split("/")
+            if len(parts) == 3:
+                state["progress_start"] = int(parts[0])
+                state["progress_current"] = int(parts[1])
+                state["progress_end"] = int(parts[2])
+                # Receiving progress means we're actively playing
+                state["active"] = True
+        except (ValueError, UnicodeDecodeError):
+            pass
+    elif topic_key == "active_start":
         state["active"] = True
         print("Playback session started")
-    elif subtopic == "active_end":
+    elif topic_key == "active_end":
         state["active"] = False
         # Clear metadata on session end
         state["artist"] = ""
@@ -93,11 +164,21 @@ def on_message(client, userdata, msg):
         state["title"] = ""
         state["genre"] = ""
         state["cover_art"] = None
+        state["cover_version"] += 1
         print("Playback session ended")
-    elif subtopic == "play_start":
+    elif topic_key == "play_start":
         state["active"] = True
-    elif subtopic == "play_end":
+    elif topic_key == "play_end":
         pass  # Keep metadata visible after song ends
+    elif topic_key == "pbeg":
+        # Playback began
+        state["active"] = True
+    elif topic_key == "pend":
+        # Playback ended/paused - keep metadata but stop progress
+        state["active"] = False
+
+    # Notify all connected SSE clients of state change
+    notify_clients()
 
 
 def on_disconnect(client, userdata, disconnect_flags, reason_code, properties=None):
@@ -111,12 +192,15 @@ def setup_mqtt():
 
     mqtt_config = config["mqtt"]
 
-    # Create client (use MQTTv3.1.1 for broader compatibility)
+    # Create client with hostname-based unique ID
+    base_client_id = mqtt_config.get("client_id", "shairport-web")
+    client_id = f"{base_client_id}-{socket.gethostname()}"
     mqtt_client = mqtt.Client(
         callback_api_version=CallbackAPIVersion.VERSION2,
-        client_id=mqtt_config.get("client_id", "shairport-web"),
+        client_id=client_id,
         protocol=mqtt.MQTTv311
     )
+    print(f"MQTT client ID: {client_id}")
 
     # Set callbacks
     mqtt_client.on_connect = on_connect
@@ -150,16 +234,36 @@ def index():
 @app.route("/api/state")
 def get_state():
     """Return current playback state as JSON."""
-    return jsonify({
-        "active": state["active"],
-        "artist": state["artist"],
-        "album": state["album"],
-        "title": state["title"],
-        "genre": state["genre"],
-        "volume": state["volume"],
-        "client_name": state["client_name"],
-        "has_cover": state["cover_art"] is not None,
-    })
+    return jsonify(get_state_dict())
+
+
+@app.route("/api/events")
+def events():
+    """Server-Sent Events endpoint for real-time updates."""
+    def stream():
+        client_queue = queue.Queue(maxsize=10)
+        sse_clients.append(client_queue)
+        try:
+            # Send initial state immediately
+            yield f"data: {json.dumps(get_state_dict())}\n\n"
+            while True:
+                try:
+                    message = client_queue.get(timeout=30)
+                    yield message
+                except queue.Empty:
+                    # Send keepalive comment to prevent timeout
+                    yield ": keepalive\n\n"
+        except GeneratorExit:
+            pass
+        finally:
+            if client_queue in sse_clients:
+                sse_clients.remove(client_queue)
+
+    response = Response(stream(), mimetype="text/event-stream")
+    response.headers["Cache-Control"] = "no-cache"
+    response.headers["X-Accel-Buffering"] = "no"
+    response.headers["Connection"] = "keep-alive"
+    return response
 
 
 @app.route("/api/cover")
@@ -171,8 +275,8 @@ def get_cover():
             mimetype=state["cover_art_type"]
         )
     else:
-        # Return a placeholder or 404
-        return Response(status=404)
+        # Redirect to placeholder
+        return redirect("/static/placeholder.svg")
 
 
 @app.route("/api/control/<command>", methods=["POST"])
@@ -199,10 +303,14 @@ def control(command):
         "play": "play",
         "pause": "pause",
         "playpause": "playpause",
+        "playresume": "playresume",
         "next": "nextitem",
         "previous": "previtem",
+        "fastforward": "beginff",
+        "rewind": "beginrew",
         "volumeup": "volumeup",
         "volumedown": "volumedown",
+        "mute": "mutetoggle",
         "stop": "stop",
         "shuffle": "shuffle_songs",
         "repeat": "repeat",
